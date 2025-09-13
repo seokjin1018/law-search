@@ -4,13 +4,11 @@ document.getElementById("mode").addEventListener("change", () => {
     if (mode === "AND_OR") {
         help.innerHTML = `AND_OR 모드: 첫 번째 키워드는 반드시 포함, 두 번째 또는 세 번째 키워드 중 하나라도 포함된 결과를 보여줍니다.<br>예) "민법, 계약, 해지"`;
     } else if (mode === "AND") {
-        help.textContent = "AND 모드: 모든 키워드가 포함된 결과를 보여줍니다.";
+        help.textContent = "AND 모드: 쉼표로 구분된 모든 키워드가 포함된 결과를 보여줍니다.";
     } else if (mode === "OR") {
         help.textContent = "OR 모드: 키워드 중 하나라도 포함된 결과를 보여줍니다.";
     } else if (mode === "SINGLE") {
         help.textContent = "SINGLE 모드: 첫 번째 키워드가 포함된 결과를 보여줍니다.";
-    } else if (mode === "NOT") {
-        help.textContent = "NOT 모드: 첫 번째 키워드는 포함되지만 제외어는 포함되지 않은 결과를 보여줍니다.";
     }
 });
 
@@ -26,7 +24,6 @@ document.getElementById("searchBtn").addEventListener("click", () => {
     })
     .then(res => res.json())
     .then(data => {
-        console.log(data[0]);
         renderTable(data);
     });
 });

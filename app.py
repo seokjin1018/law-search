@@ -39,21 +39,27 @@ def search():
         for case in cases:
             strings = get_all_strings(case)
 
+            if ex_clean and any(ex in s for s in strings for ex in ex_clean):
+                continue
+
             if mode == "SINGLE":
-                if any(kw_clean[0] in s for s in strings):
+                if kw_clean and any(kw_clean[0] in s for s in strings):
                     results.append(case)
+
             elif mode == "OR":
                 if any(any(kw in s for s in strings) for kw in kw_clean):
                     results.append(case)
+
             elif mode == "AND":
                 if all(any(kw in s for s in strings) for kw in kw_clean):
                     results.append(case)
-            elif mode == "NOT":
-                if any(kw_clean[0] in s for s in strings) and not any(ex in s for s in strings for ex in ex_clean):
-                    results.append(case)
+
             elif mode == "AND_OR":
-                if len(kw_clean) >= 3:
-                    if any(kw_clean[0] in s for s in strings) and (any(kw_clean[1] in s for s in strings) or any(kw_clean[2] in s for s in strings)):
+                if len(kw_clean) >= 2:
+                    if any(kw_clean[0] in s for s in strings) and any(kw in s for s in strings for kw in kw_clean[1:]):
                         results.append(case)
 
     return jsonify(results)
+
+if __name__ == "__main__":
+    app.run(debug=True)
