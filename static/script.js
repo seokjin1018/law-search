@@ -26,15 +26,16 @@ document.getElementById("searchBtn").addEventListener("click", () => {
     })
     .then(res => res.json())
     .then(data => {
+        console.log(data[0]);
         renderTable(data);
     });
 });
 
 function formatIssueText(text) {
     return text
-        .replace(/(\[\d+\])/g, '$1\n')
-        .replace(/(\d+\.)/g, '$1\n')
-        .replace(/([①-⑳])/g, '$1\n');
+        .replace(/\[([2-9]|\d{2,})\]/g, '\n[$1]')
+        .replace(/([②-⑳])/g, '\n$1')
+        .replace(/(\d+\.)/g, '\n$1');
 }
 
 function renderTable(data) {
@@ -43,11 +44,11 @@ function renderTable(data) {
         return;
     }
 
-    const columnOrder = ["판례정보", "제목", "쟁점", "선정이유"];
+    const columnOrder = ["판례 정보", "제목", "쟁점", "선정이유"];
 
     let table = "<table><thead><tr>";
     columnOrder.forEach(col => {
-        table += `<th class="${col === '판례정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${col}</th>`;
+        table += `<th class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${col}</th>`;
     });
     table += "</tr></thead><tbody>";
 
@@ -69,11 +70,11 @@ function renderTable(data) {
                 if (match) {
                     const caseNo = match[0];
                     const link = `https://casenote.kr/대법원/${encodeURIComponent(caseNo)}`;
-                    table += `<td class="${col === '판례정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}"><a href="${link}" target="_blank">${val}</a></td>`;
+                    table += `<td class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}"><a href="${link}" target="_blank">${val}</a></td>`;
                     return;
                 }
             }
-            table += `<td class="${col === '판례정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${val}</td>`;
+            table += `<td class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${val || ''}</td>`;
         });
         table += "</tr>";
     });

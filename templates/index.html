@@ -9,15 +9,15 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
     th { background-color: #f2f2f2; }
 
-    /* 폭 비율 1:1:2:2 */
     th.caseinfo, td.caseinfo { width: 16.66%; }
     th.title, td.title { width: 16.66%; }
     th.issue, td.issue { width: 33.33%; }
     th.reason, td.reason { width: 33.33%; }
 
-    td.issue, td.reason {
+    td.caseinfo, td.title, td.issue, td.reason {
         white-space: pre-wrap;
-        word-wrap: break-word;
+        word-break: keep-all;
+        line-height: 1.5;
     }
 </style>
 </head>
