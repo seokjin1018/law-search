@@ -98,30 +98,41 @@ function renderTable(data) {
     const columnOrder = ["판례 정보", "제목", "쟁점", "선정이유"];
     let table = "<table><thead><tr>";
     columnOrder.forEach(col => {
-        table += `<th class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${col}</th>`;
+        table += `<th class="${col === '판례 정보' ? 'caseinfo' 
+                        : col === '제목' ? 'title' 
+                        : col === '쟁점' ? 'issue' : 'reason'}">${col}</th>`;
     });
     table += "</tr></thead><tbody>";
-    const caseTypes = ["다", "도", "두", "헌가", "헌나", "헌다", "헌라", "헌마", "헌바"];
-    const regex = new RegExp(`(\\d{4}|\\d{2})(${caseTypes.join("|")})\\d+`);
+
+    // 사건번호 패턴: 연도(2~4자리) + 한글 1~3자 + 숫자
+    const regex = /\b\d{2,4}[가-힣]{1,3}\d+\b/;
+
     data.forEach(row => {
         table += "<tr>";
         columnOrder.forEach(col => {
             let val = row[col];
             if (typeof val === "object") val = JSON.stringify(val);
-            if (col === "쟁점" && typeof val === "string") val = formatIssueText(val);
-            if (typeof val === "string") {
+            if (col === "쟁점" && typeof val === "string") {
+                val = formatIssueText(val);
+            }
+
+            if (col === "판례 정보" && typeof val === "string") {
                 const match = val.match(regex);
                 if (match) {
                     const caseNo = match[0];
                     const link = `https://casenote.kr/대법원/${encodeURIComponent(caseNo)}`;
-                    table += `<td class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}"><a href="${link}" target="_blank">${val}</a></td>`;
+                    table += `<td class="caseinfo"><a href="${link}" target="_blank">${val}</a></td>`;
                     return;
                 }
             }
-            table += `<td class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${val || ''}</td>`;
+
+            table += `<td class="${col === '판례 정보' ? 'caseinfo' 
+                        : col === '제목' ? 'title' 
+                        : col === '쟁점' ? 'issue' : 'reason'}">${val || ''}</td>`;
         });
         table += "</tr>";
     });
+
     table += "</tbody></table>";
     document.getElementById("result").innerHTML = table;
 }
