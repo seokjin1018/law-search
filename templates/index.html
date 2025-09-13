@@ -5,13 +5,25 @@
 <title>판례 검색</title>
 <script src="/static/script.js" defer></script>
 <style>
-table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-th { background-color: #f2f2f2; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; table-layout: fixed; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+    th { background-color: #f2f2f2; }
+
+    /* 폭 비율 1:1:2:2 */
+    th.caseinfo, td.caseinfo { width: 16.66%; }
+    th.title, td.title { width: 16.66%; }
+    th.issue, td.issue { width: 33.33%; }
+    th.reason, td.reason { width: 33.33%; }
+
+    td.issue, td.reason {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
 </style>
 </head>
 <body>
 <h1>판례 검색</h1>
+
 <label>검색 모드:
 <select id="mode">
   <option value="SINGLE">단일 키워드</option>
@@ -21,10 +33,15 @@ th { background-color: #f2f2f2; }
   <option value="AND_OR">AND (OR)</option>
 </select>
 </label>
+<p id="modeHelp" style="font-size:0.9em; color:#555; margin-top:4px;">
+    모드를 선택하면 사용법이 여기에 표시됩니다.
+</p>
+
 <br><br>
 <label>키워드 (쉼표로 구분): <input type="text" id="keywords"></label><br><br>
 <label>제외 키워드 (쉼표, NOT 모드에서만): <input type="text" id="exclude"></label><br><br>
 <button id="searchBtn">검색</button>
+
 <h2>검색 결과</h2>
 <div id="result"></div>
 </body>
