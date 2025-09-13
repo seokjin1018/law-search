@@ -1,3 +1,39 @@
+fetch("/laws")
+    .then(res => res.json())
+    .then(laws => {
+        const container = document.getElementById("lawList");
+
+        const allLabel = document.createElement("label");
+        const allCheckbox = document.createElement("input");
+        allCheckbox.type = "checkbox";
+        allCheckbox.value = "전체";
+        allCheckbox.id = "checkAll";
+        allCheckbox.checked = true;
+        allLabel.appendChild(allCheckbox);
+        allLabel.appendChild(document.createTextNode(" 전체"));
+        container.appendChild(allLabel);
+        container.appendChild(document.createElement("br"));
+
+        laws.forEach(law => {
+            const label = document.createElement("label");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = law;
+            checkbox.checked = true;
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(" " + law));
+            container.appendChild(label);
+            container.appendChild(document.createElement("br"));
+        });
+
+        allCheckbox.addEventListener("change", () => {
+            const checkboxes = container.querySelectorAll("input[type=checkbox]");
+            checkboxes.forEach(cb => {
+                if (cb !== allCheckbox) cb.checked = allCheckbox.checked;
+            });
+        });
+    });
+
 document.getElementById("mode").addEventListener("change", () => {
     const mode = document.getElementById("mode").value;
     const help = document.getElementById("modeHelp");
@@ -12,21 +48,38 @@ document.getElementById("mode").addEventListener("change", () => {
     }
 });
 
-document.getElementById("searchBtn").addEventListener("click", () => {
+document.getElementById("keywords").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("exclude").focus();
+    }
+});
+
+document.getElementById("exclude").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        search();
+    }
+});
+
+document.getElementById("searchBtn").addEventListener("click", search);
+
+function search() {
     const mode = document.getElementById("mode").value;
     const keywords = document.getElementById("keywords").value.split(",").map(k => k.trim()).filter(k => k);
     const exclude = document.getElementById("exclude").value.split(",").map(k => k.trim()).filter(k => k);
+    const selectedLaws = Array.from(document.querySelectorAll("#lawList input[type=checkbox]:checked")).map(cb => cb.value);
 
     fetch("/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, keywords, exclude })
+        body: JSON.stringify({ mode, keywords, exclude, laws: selectedLaws })
     })
     .then(res => res.json())
     .then(data => {
         renderTable(data);
     });
-});
+}
 
 function formatIssueText(text) {
     return text
@@ -40,42 +93,7 @@ function renderTable(data) {
         document.getElementById("result").innerHTML = "<p>검색 결과가 없습니다.</p>";
         return;
     }
-
     const columnOrder = ["판례 정보", "제목", "쟁점", "선정이유"];
-
     let table = "<table><thead><tr>";
     columnOrder.forEach(col => {
-        table += `<th class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${col}</th>`;
-    });
-    table += "</tr></thead><tbody>";
-
-    const caseTypes = ["다", "도", "두", "헌가", "헌나", "헌다", "헌라", "헌마", "헌바"];
-    const regex = new RegExp(`(\\d{4}|\\d{2})(${caseTypes.join("|")})\\d+`);
-
-    data.forEach(row => {
-        table += "<tr>";
-        columnOrder.forEach(col => {
-            let val = row[col];
-            if (typeof val === "object") {
-                val = JSON.stringify(val);
-            }
-            if (col === "쟁점" && typeof val === "string") {
-                val = formatIssueText(val);
-            }
-            if (typeof val === "string") {
-                const match = val.match(regex);
-                if (match) {
-                    const caseNo = match[0];
-                    const link = `https://casenote.kr/대법원/${encodeURIComponent(caseNo)}`;
-                    table += `<td class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}"><a href="${link}" target="_blank">${val}</a></td>`;
-                    return;
-                }
-            }
-            table += `<td class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${val || ''}</td>`;
-        });
-        table += "</tr>";
-    });
-
-    table += "</tbody></table>";
-    document.getElementById("result").innerHTML = table;
-}
+        table += `<th class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' :
