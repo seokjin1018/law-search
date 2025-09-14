@@ -2,36 +2,31 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch("/laws")
         .then(res => res.json())
         .then(laws => {
-            const container = document.getElementById("lawList");
+            const select = document.getElementById("lawSelect");
 
-            const allLabel = document.createElement("label");
-            const allCheckbox = document.createElement("input");
-            allCheckbox.type = "checkbox";
-            allCheckbox.value = "전체";
-            allCheckbox.id = "checkAll";
-            allCheckbox.checked = true;
-            allLabel.appendChild(allCheckbox);
-            allLabel.appendChild(document.createTextNode(" 전체"));
-            container.appendChild(allLabel);
-            container.appendChild(document.createElement("br"));
+            // "전체" 옵션 추가
+            const allOption = document.createElement("option");
+            allOption.value = "전체";
+            allOption.textContent = "전체";
+            select.appendChild(allOption);
 
+            // 법령 옵션 추가
             laws.forEach(law => {
-                const label = document.createElement("label");
-                const checkbox = document.createElement("input");
-                checkbox.type = "checkbox";
-                checkbox.value = law;
-                checkbox.checked = true;
-                label.appendChild(checkbox);
-                label.appendChild(document.createTextNode(" " + law));
-                container.appendChild(label);
-                container.appendChild(document.createElement("br"));
+                const opt = document.createElement("option");
+                opt.value = law;
+                opt.textContent = law;
+                select.appendChild(opt);
             });
 
-            allCheckbox.addEventListener("change", () => {
-                const checkboxes = container.querySelectorAll("input[type=checkbox]");
-                checkboxes.forEach(cb => {
-                    if (cb !== allCheckbox) cb.checked = allCheckbox.checked;
-                });
+            // ✅ 전체 선택 자동화
+            select.addEventListener("change", () => {
+                const selected = Array.from(select.selectedOptions).map(o => o.value);
+                if (selected.includes("전체")) {
+                    // 전체 선택 시 모든 옵션 선택
+                    for (let i = 0; i < select.options.length; i++) {
+                        select.options[i].selected = true;
+                    }
+                }
             });
         });
 
@@ -70,7 +65,11 @@ function search() {
     const mode = document.getElementById("mode").value;
     const keywords = document.getElementById("keywords").value.split(",").map(k => k.trim()).filter(k => k);
     const exclude = document.getElementById("exclude").value.split(",").map(k => k.trim()).filter(k => k);
-    const selectedLaws = Array.from(document.querySelectorAll("#lawList input[type=checkbox]:checked")).map(cb => cb.value);
+
+    const lawSelect = document.getElementById("lawSelect");
+    const selectedLaws = Array.from(lawSelect.selectedOptions).map(opt => opt.value);
+
+    console.log("선택된 법령:", selectedLaws);
 
     fetch("/search", {
         method: "POST",
@@ -100,39 +99,4 @@ function renderTable(data) {
     columnOrder.forEach(col => {
         table += `<th class="${col === '판례 정보' ? 'caseinfo' 
                         : col === '제목' ? 'title' 
-                        : col === '쟁점' ? 'issue' : 'reason'}">${col}</th>`;
-    });
-    table += "</tr></thead><tbody>";
-
-    // 사건번호 패턴: 연도(2~4자리) + 한글 1~3자 + 숫자
-    const regex = /\b\d{2,4}[가-힣]{1,3}\d+\b/;
-
-    data.forEach(row => {
-        table += "<tr>";
-        columnOrder.forEach(col => {
-            let val = row[col];
-            if (typeof val === "object") val = JSON.stringify(val);
-            if (col === "쟁점" && typeof val === "string") {
-                val = formatIssueText(val);
-            }
-
-            if (col === "판례 정보" && typeof val === "string") {
-                const match = val.match(regex);
-                if (match) {
-                    const caseNo = match[0];
-                    const link = `https://casenote.kr/대법원/${encodeURIComponent(caseNo)}`;
-                    table += `<td class="caseinfo"><a href="${link}" target="_blank">${val}</a></td>`;
-                    return;
-                }
-            }
-
-            table += `<td class="${col === '판례 정보' ? 'caseinfo' 
-                        : col === '제목' ? 'title' 
-                        : col === '쟁점' ? 'issue' : 'reason'}">${val || ''}</td>`;
-        });
-        table += "</tr>";
-    });
-
-    table += "</tbody></table>";
-    document.getElementById("result").innerHTML = table;
-}
+                        : col === '쟁점' ? 'issue'

@@ -34,7 +34,7 @@ def search():
     mode = request.json.get("mode")
     keywords = request.json.get("keywords", [])
     exclude = request.json.get("exclude", [])
-    selected_laws = request.json.get("laws") or []  # 안전 초기화
+    selected_laws = request.json.get("laws") or []
 
     kw_clean = [clean_text(k) for k in keywords if k]
     ex_clean = [clean_text(k) for k in exclude if k]
