@@ -3,12 +3,13 @@ import json, re
 
 app = Flask(__name__)
 
-# 데이터 로드
 with open("precedents_data_cleaned_clean.json", encoding="utf-8-sig") as f:
     data = json.load(f)
 
+def clean_text(text):
+    return re.sub(r"\s+", "", text)  # 모든 공백 제거
+
 def get_all_strings(obj):
-    """판례 데이터에서 모든 문자열 추출 (공백 유지)"""
     strings = []
     if isinstance(obj, dict):
         for v in obj.values():
@@ -20,13 +21,11 @@ def get_all_strings(obj):
         strings.append(obj)
     return strings
 
-# 🔹 공백 무시 + 정확 단어 매칭
-def matches_ignore_space_exact(keyword, target):
-    # 검색어와 대상에서 공백 제거
+# 🔹 공백만 제거해서 비교
+def matches_ignore_space(keyword, target):
     kw_norm = re.sub(r"\s+", "", keyword)
     target_norm = re.sub(r"\s+", "", target)
-    # 정확히 같은 단어일 때만 매칭
-    return kw_norm == target_norm
+    return kw_norm in target_norm
 
 @app.route("/")
 def index():
@@ -49,26 +48,26 @@ def search():
             continue
         for case in cases:
             strings = get_all_strings(case)
-            strings.append(law)  # 법령명도 검색 대상에 포함
+            strings.append(law)
 
-            # 제외 키워드 처리
-            if exclude and any(matches_ignore_space_exact(ex, s) for s in strings for ex in exclude):
+            # 제외 키워드
+            if exclude and any(matches_ignore_space(ex, s) for s in strings for ex in exclude):
                 continue
 
             # 검색 모드별 처리
             if mode == "SINGLE":
-                if keywords and any(matches_ignore_space_exact(keywords[0], s) for s in strings):
+                if keywords and any(matches_ignore_space(keywords[0], s) for s in strings):
                     results.append(case)
             elif mode == "OR":
-                if any(any(matches_ignore_space_exact(kw, s) for s in strings) for kw in keywords):
+                if any(any(matches_ignore_space(kw, s) for s in strings) for kw in keywords):
                     results.append(case)
             elif mode == "AND":
-                if all(any(matches_ignore_space_exact(kw, s) for s in strings) for kw in keywords):
+                if all(any(matches_ignore_space(kw, s) for s in strings) for kw in keywords):
                     results.append(case)
             elif mode == "AND_OR":
                 if len(keywords) >= 2:
-                    if any(matches_ignore_space_exact(keywords[0], s) for s in strings) and \
-                       any(matches_ignore_space_exact(kw, s) for s in strings for kw in keywords[1:]):
+                    if any(matches_ignore_space(keywords[0], s) for s in strings) and \
+                       any(matches_ignore_space(kw, s) for s in strings for kw in keywords[1:]):
                         results.append(case)
 
     return jsonify(results)

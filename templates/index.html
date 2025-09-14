@@ -1,48 +1,46 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<title>판례 검색</title>
-<script src="/static/script.js" defer></script>
-<style>
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; table-layout: fixed; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
-    th { background-color: #f2f2f2; }
-    th.caseinfo, td.caseinfo { width: 16.66%; }
-    th.title, td.title { width: 16.66%; }
-    th.issue, td.issue { width: 33.33%; }
-    th.reason, td.reason { width: 33.33%; }
-    td.caseinfo, td.title, td.issue, td.reason {
-        white-space: pre-wrap;
-        word-break: keep-all;
-        line-height: 1.5;
-    }
-</style>
+    <meta charset="UTF-8">
+    <title>판례 검색</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+    </style>
 </head>
 <body>
-<h1>판례 검색</h1>
+    <h1>판례 검색</h1>
 
-<div id="lawList"></div>
-<br>
+    <label>검색 모드:
+        <select id="mode">
+            <option value="SINGLE">단일</option>
+            <option value="AND">AND</option>
+            <option value="OR">OR</option>
+            <option value="AND_OR">AND_OR</option>
+        </select>
+    </label>
+    <br><br>
 
-<label>검색 모드:
-<select id="mode">
-  <option value="SINGLE">단일 키워드</option>
-  <option value="AND">AND</option>
-  <option value="OR">OR</option>
-  <option value="AND_OR">AND (OR)</option>
-</select>
-</label>
-<p id="modeHelp" style="font-size:0.9em; color:#555; margin-top:4px;">
-    모드를 선택하면 사용법이 여기에 표시됩니다.
-</p>
+    <label>키워드 (쉼표로 구분): <input type="text" id="keywords"></label><br><br>
+    <label>제외 키워드 (쉼표로 구분): <input type="text" id="exclude"></label><br><br>
 
-<br><br>
-<label>키워드 (쉼표로 구분): <input type="text" id="keywords"></label><br><br>
-<label>제외 키워드 (쉼표로 구분): <input type="text" id="exclude"></label><br><br>
-<button id="searchBtn">검색</button>
+    <div id="lawList"></div>
+    <br>
+    <button id="searchBtn">검색</button>
 
-<h2>검색 결과</h2>
-<div id="result"></div>
+    <table id="resultTable">
+        <thead>
+            <tr>
+                <th>법령명</th>
+                <th>사건명</th>
+                <th>판례 내용</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script src="script.js"></script>
 </body>
 </html>
