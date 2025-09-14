@@ -1,17 +1,32 @@
 from flask import Flask, render_template, request, jsonify
-import json, re, os
+import json, re, os, sys
 
 app = Flask(__name__)
 
+# 운영 환경에서 데이터 없으면 서버 중단 여부 (True면 강제 종료)
+STRICT_DATA_CHECK = os.environ.get("STRICT_DATA_CHECK", "False").lower() == "true"
+
+# 데이터 로드
 data = {}
 json_path = os.path.join(os.path.dirname(__file__), "precedents_data_cleaned_clean.json")
 try:
     with open(json_path, encoding="utf-8-sig") as f:
         data = json.load(f)
+    total_cases = sum(len(c) for c in data.values())
+    print(f"[INFO] 로드된 판례 수: {total_cases}")
+    if total_cases == 0 and STRICT_DATA_CHECK:
+        print("[오류] 데이터가 비어 있습니다. 서버를 종료합니다.")
+        sys.exit(1)
+    elif total_cases == 0:
+        print("[경고] 데이터가 비어 있습니다. 검색 결과가 항상 빈 값이 반환됩니다.")
 except FileNotFoundError:
-    print(f"[경고] 데이터 파일을 찾을 수 없습니다: {json_path}")
+    print(f"[오류] 데이터 파일을 찾을 수 없습니다: {json_path}")
+    if STRICT_DATA_CHECK:
+        sys.exit(1)
 except json.JSONDecodeError as e:
-    print(f"[경고] JSON 파싱 오류: {e}")
+    print(f"[오류] JSON 파싱 오류: {e}")
+    if STRICT_DATA_CHECK:
+        sys.exit(1)
 
 def get_all_strings(obj):
     strings = []
@@ -23,17 +38,24 @@ def get_all_strings(obj):
             strings.extend(get_all_strings(item))
     elif isinstance(obj, str):
         strings.append(obj)
+    else:
+        strings.append(str(obj))
     return strings
 
 def strict_match(keyword, text):
-    if len(keyword) > 1:
-        pattern = r"".join(re.escape(ch) + r"\s*" for ch in keyword[:-1]) + re.escape(keyword[-1])
-        match_result = re.search(pattern, text) is not None
-        print(f"[DEBUG] strict_match: keyword='{keyword}', text='{text}', pattern='{pattern}', match={match_result}")
+    clean_text = re.sub(r"[\u200B-\u200D\uFEFF]", "", text)
+    clean_keyword = re.sub(r"[\u200B-\u200D\uFEFF]", "", keyword)
+
+    if len(clean_keyword) > 1:
+        pattern = r"".join(re.escape(ch) + r"\s*" for ch in clean_keyword[:-1]) + re.escape(clean_keyword[-1])
+        match_result = re.search(pattern, clean_text) is not None
+        if match_result:
+            print(f"[DEBUG] keyword='{clean_keyword}', text='{clean_text}', pattern='{pattern}', match=True")
         return match_result
     else:
-        match_result = keyword in text
-        print(f"[DEBUG] strict_match: keyword='{keyword}', text='{text}', match={match_result}")
+        match_result = clean_keyword in clean_text
+        if match_result:
+            print(f"[DEBUG] keyword='{clean_keyword}', text='{clean_text}', match=True")
         return match_result
 
 @app.route("/")
@@ -77,5 +99,5 @@ def search():
     return jsonify(results)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 5000))  # Render 환경 호환
     app.run(host="0.0.0.0", port=port, debug=False)
