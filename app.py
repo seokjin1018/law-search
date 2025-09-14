@@ -3,9 +3,18 @@ import json, re, os
 
 app = Flask(__name__)
 
-with open("precedents_data_cleaned_clean.json", encoding="utf-8-sig") as f:
-    data = json.load(f)
+# 데이터 로드
+data = {}
+json_path = os.path.join(os.path.dirname(__file__), "precedents_data_cleaned_clean.json")
+try:
+    with open(json_path, encoding="utf-8-sig") as f:
+        data = json.load(f)
+except FileNotFoundError:
+    print(f"[경고] 데이터 파일을 찾을 수 없습니다: {json_path}")
+except json.JSONDecodeError as e:
+    print(f"[경고] JSON 파싱 오류: {e}")
 
+# 모든 문자열 추출
 def get_all_strings(obj):
     strings = []
     if isinstance(obj, dict):
@@ -18,6 +27,7 @@ def get_all_strings(obj):
         strings.append(obj)
     return strings
 
+# 글자 단위 공백 허용, 다른 문자는 불허
 def strict_match(keyword, text):
     if len(keyword) > 1:
         pattern = r"".join(re.escape(ch) + r"\s*" for ch in keyword[:-1]) + re.escape(keyword[-1])
@@ -47,8 +57,12 @@ def search():
         for case in cases:
             strings = get_all_strings(case)
             strings.append(law)
+
+            # 제외 키워드 검사
             if exclude and any(strict_match(ex, s) for s in strings for ex in exclude):
                 continue
+
+            # 포함 키워드 검사
             if mode == "SINGLE":
                 if keywords and any(strict_match(keywords[0], s) for s in strings):
                     results.append(case)
@@ -66,4 +80,5 @@ def search():
     return jsonify(results)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
