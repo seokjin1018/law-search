@@ -114,6 +114,7 @@ function renderTable(data) {
                     return;
                 }
             }
+            // 하이라이트 HTML이 포함될 수 있으므로 innerHTML로 넣기
             table += `<td class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${val || ''}</td>`;
         });
         table += "</tr>";

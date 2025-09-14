@@ -3,7 +3,7 @@ import json, re, os, sys
 
 app = Flask(__name__)
 
-# 운영 환경에서 데이터 없으면 서버 중단 여부 (True면 강제 종료)
+# 운영 환경에서 데이터 없으면 서버 중단 여부
 STRICT_DATA_CHECK = os.environ.get("STRICT_DATA_CHECK", "False").lower() == "true"
 
 # 데이터 로드
@@ -58,6 +58,18 @@ def strict_match(keyword, text):
             print(f"[DEBUG] keyword='{clean_keyword}', text='{clean_text}', match=True")
         return match_result
 
+def highlight_matches(text, keywords):
+    if not isinstance(text, str):
+        return text
+    highlighted = text
+    for kw in keywords:
+        if len(kw) > 1:
+            pattern = r"(" + r"\s*".join(map(re.escape, kw)) + r")"
+        else:
+            pattern = re.escape(kw)
+        highlighted = re.sub(pattern, r"<mark>\1</mark>", highlighted, flags=re.IGNORECASE)
+    return highlighted
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -82,22 +94,25 @@ def search():
             strings.append(law)
             if exclude and any(strict_match(ex, s) for s in strings for ex in exclude):
                 continue
+            matched = False
             if mode == "SINGLE":
-                if keywords and any(strict_match(keywords[0], s) for s in strings):
-                    results.append(case)
+                matched = keywords and any(strict_match(keywords[0], s) for s in strings)
             elif mode == "OR":
-                if any(any(strict_match(kw, s) for s in strings) for kw in keywords):
-                    results.append(case)
+                matched = any(any(strict_match(kw, s) for s in strings) for kw in keywords)
             elif mode == "AND":
-                if all(any(strict_match(kw, s) for s in strings) for kw in keywords):
-                    results.append(case)
+                matched = all(any(strict_match(kw, s) for s in strings) for kw in keywords)
             elif mode == "AND_OR":
                 if len(keywords) >= 2:
-                    if any(strict_match(keywords[0], s) for s in strings) and \
-                       any(strict_match(kw, s) for s in strings for kw in keywords[1:]):
-                        results.append(case)
+                    matched = any(strict_match(keywords[0], s) for s in strings) and \
+                              any(strict_match(kw, s) for s in strings for kw in keywords[1:])
+            if matched:
+                highlighted_case = {
+                    k: highlight_matches(v, keywords) if isinstance(v, str) else v
+                    for k, v in case.items()
+                }
+                results.append(highlighted_case)
     return jsonify(results)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Render 환경 호환
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
