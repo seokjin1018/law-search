@@ -3,7 +3,6 @@ import json, re, os
 
 app = Flask(__name__)
 
-# 데이터 로드
 data = {}
 json_path = os.path.join(os.path.dirname(__file__), "precedents_data_cleaned_clean.json")
 try:
@@ -14,7 +13,6 @@ except FileNotFoundError:
 except json.JSONDecodeError as e:
     print(f"[경고] JSON 파싱 오류: {e}")
 
-# 모든 문자열 추출
 def get_all_strings(obj):
     strings = []
     if isinstance(obj, dict):
@@ -27,13 +25,16 @@ def get_all_strings(obj):
         strings.append(obj)
     return strings
 
-# 글자 단위 공백 허용, 다른 문자는 불허
 def strict_match(keyword, text):
     if len(keyword) > 1:
         pattern = r"".join(re.escape(ch) + r"\s*" for ch in keyword[:-1]) + re.escape(keyword[-1])
-        return re.search(pattern, text) is not None
+        match_result = re.search(pattern, text) is not None
+        print(f"[DEBUG] strict_match: keyword='{keyword}', text='{text}', pattern='{pattern}', match={match_result}")
+        return match_result
     else:
-        return keyword in text
+        match_result = keyword in text
+        print(f"[DEBUG] strict_match: keyword='{keyword}', text='{text}', match={match_result}")
+        return match_result
 
 @app.route("/")
 def index():
@@ -57,12 +58,8 @@ def search():
         for case in cases:
             strings = get_all_strings(case)
             strings.append(law)
-
-            # 제외 키워드 검사
             if exclude and any(strict_match(ex, s) for s in strings for ex in exclude):
                 continue
-
-            # 포함 키워드 검사
             if mode == "SINGLE":
                 if keywords and any(strict_match(keywords[0], s) for s in strings):
                     results.append(case)
