@@ -6,9 +6,6 @@ app = Flask(__name__)
 with open("precedents_data_cleaned_clean.json", encoding="utf-8-sig") as f:
     data = json.load(f)
 
-def clean_text(text):
-    return re.sub(r"\s+", "", text)
-
 def get_all_strings(obj):
     strings = []
     if isinstance(obj, dict):
@@ -21,9 +18,9 @@ def get_all_strings(obj):
         strings.append(obj)
     return strings
 
-def keyword_match(keyword, text):
-    if len(keyword) >= 2:
-        pattern = re.escape(keyword[0]) + r"\s*" + re.escape(keyword[1:])
+def strict_match(keyword, text):
+    if len(keyword) > 1:
+        pattern = r"".join(re.escape(ch) + r"\s*" for ch in keyword[:-1]) + re.escape(keyword[-1])
         return re.search(pattern, text) is not None
     else:
         return keyword in text
@@ -50,21 +47,21 @@ def search():
         for case in cases:
             strings = get_all_strings(case)
             strings.append(law)
-            if exclude and any(keyword_match(ex, s) for s in strings for ex in exclude):
+            if exclude and any(strict_match(ex, s) for s in strings for ex in exclude):
                 continue
             if mode == "SINGLE":
-                if keywords and any(keyword_match(keywords[0], s) for s in strings):
+                if keywords and any(strict_match(keywords[0], s) for s in strings):
                     results.append(case)
             elif mode == "OR":
-                if any(any(keyword_match(kw, s) for s in strings) for kw in keywords):
+                if any(any(strict_match(kw, s) for s in strings) for kw in keywords):
                     results.append(case)
             elif mode == "AND":
-                if all(any(keyword_match(kw, s) for s in strings) for kw in keywords):
+                if all(any(strict_match(kw, s) for s in strings) for kw in keywords):
                     results.append(case)
             elif mode == "AND_OR":
                 if len(keywords) >= 2:
-                    if any(keyword_match(keywords[0], s) for s in strings) and \
-                       any(keyword_match(kw, s) for s in strings for kw in keywords[1:]):
+                    if any(strict_match(keywords[0], s) for s in strings) and \
+                       any(strict_match(kw, s) for s in strings for kw in keywords[1:]):
                         results.append(case)
     return jsonify(results)
 
