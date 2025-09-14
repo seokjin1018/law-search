@@ -7,7 +7,7 @@ with open("precedents_data_cleaned_clean.json", encoding="utf-8-sig") as f:
     data = json.load(f)
 
 def clean_text(text):
-    return re.sub(r"\s+", "", text)
+    return re.sub(r"\s+", "", text)  # 기존 전처리: 모든 공백 제거
 
 def get_all_strings(obj):
     strings = []
@@ -18,8 +18,14 @@ def get_all_strings(obj):
         for item in obj:
             strings.extend(get_all_strings(item))
     elif isinstance(obj, str):
-        strings.append(clean_text(obj))
+        strings.append(obj)  # 원문 그대로 저장 (공백 유지)
     return strings
+
+# 🔹 공백만 제거해서 비교하는 함수
+def matches_ignore_space(keyword, target):
+    kw_norm = re.sub(r"\s+", "", keyword)
+    target_norm = re.sub(r"\s+", "", target)
+    return kw_norm in target_norm
 
 @app.route("/")
 def index():
@@ -36,32 +42,34 @@ def search():
     exclude = request.json.get("exclude", [])
     selected_laws = request.json.get("laws") or []
 
-    kw_clean = [clean_text(k) for k in keywords if k]
-    ex_clean = [clean_text(k) for k in exclude if k]
-
     results = []
     for law, cases in data.items():
         if selected_laws and "전체" not in selected_laws and law not in selected_laws:
             continue
-        law_clean = clean_text(law)
         for case in cases:
             strings = get_all_strings(case)
-            strings.append(law_clean)
-            if ex_clean and any(ex in s for s in strings for ex in ex_clean):
+            strings.append(law)  # 법령명도 검색 대상에 포함
+
+            # 제외 키워드 처리 (공백 무시)
+            if exclude and any(matches_ignore_space(ex, s) for s in strings for ex in exclude):
                 continue
+
+            # 검색 모드별 처리
             if mode == "SINGLE":
-                if kw_clean and any(kw_clean[0] in s for s in strings):
+                if keywords and any(matches_ignore_space(keywords[0], s) for s in strings):
                     results.append(case)
             elif mode == "OR":
-                if any(any(kw in s for s in strings) for kw in kw_clean):
+                if any(any(matches_ignore_space(kw, s) for s in strings) for kw in keywords):
                     results.append(case)
             elif mode == "AND":
-                if all(any(kw in s for s in strings) for kw in kw_clean):
+                if all(any(matches_ignore_space(kw, s) for s in strings) for kw in keywords):
                     results.append(case)
             elif mode == "AND_OR":
-                if len(kw_clean) >= 2:
-                    if any(kw_clean[0] in s for s in strings) and any(kw in s for s in strings for kw in kw_clean[1:]):
+                if len(keywords) >= 2:
+                    if any(matches_ignore_space(keywords[0], s) for s in strings) and \
+                       any(matches_ignore_space(kw, s) for s in strings for kw in keywords[1:]):
                         results.append(case)
+
     return jsonify(results)
 
 if __name__ == "__main__":
