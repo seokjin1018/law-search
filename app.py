@@ -93,6 +93,8 @@ def search():
     sort_by = request.json.get("sortBy", "default")  # default, latest, oldest
 
     results = []
+    matched_keywords = set()  # ✅ 매칭된 키워드 기록용
+
     for law, cases in data.items():
         if selected_laws and "전체" not in selected_laws and law not in selected_laws:
             continue
@@ -104,14 +106,24 @@ def search():
             matched = False
             if mode == "SINGLE":
                 matched = keywords and any(strict_match(keywords[0], s) for s in strings)
+                if matched:
+                    matched_keywords.add(keywords[0])
             elif mode == "OR":
-                matched = any(any(strict_match(kw, s) for s in strings) for kw in keywords)
+                for kw in keywords:
+                    if any(strict_match(kw, s) for s in strings):
+                        matched = True
+                        matched_keywords.add(kw)
             elif mode == "AND":
-                matched = all(any(strict_match(kw, s) for s in strings) for kw in keywords)
+                if all(any(strict_match(kw, s) for s in strings) for kw in keywords):
+                    matched = True
+                    matched_keywords.update(keywords)
             elif mode == "AND_OR":
                 if len(keywords) >= 2:
-                    matched = any(strict_match(keywords[0], s) for s in strings) and \
-                              any(strict_match(kw, s) for s in strings for kw in keywords[1:])
+                    if any(strict_match(keywords[0], s) for s in strings) and \
+                       any(strict_match(kw, s) for s in strings for kw in keywords[1:]):
+                        matched = True
+                        matched_keywords.update(keywords)
+
             if matched:
                 # 정렬용 날짜는 원본에서 추출
                 raw_info = case.get("판례 정보", "")
@@ -124,6 +136,10 @@ def search():
                 }
                 highlighted_case["_sort_date"] = sort_date
                 results.append(highlighted_case)
+
+    # ✅ 검색 끝난 뒤 한 번만 로그 출력
+    for kw in matched_keywords:
+        print(f"[DEBUG] keyword='{kw}', match=True")
 
     # 🔹 정렬 처리
     if sort_by == "latest":
