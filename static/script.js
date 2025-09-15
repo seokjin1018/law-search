@@ -77,8 +77,9 @@ function search(page = 1) {
     const keywords = document.getElementById("keywords").value.split(",").map(k => k.trim()).filter(k => k);
     const exclude = document.getElementById("exclude").value.split(",").map(k => k.trim()).filter(k => k);
     const selectedLaws = Array.from(document.querySelectorAll("#lawList input[type=checkbox]:checked")).map(cb => cb.value);
+    const sortBy = document.getElementById("sortBy") ? document.getElementById("sortBy").value : "default";
 
-    lastSearchParams = { mode, keywords, exclude, laws: selectedLaws };
+    lastSearchParams = { mode, keywords, exclude, laws: selectedLaws, sortBy };
 
     // 로딩 표시
     document.getElementById("loading").style.display = "block";

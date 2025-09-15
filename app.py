@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 import json, re, os, sys
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -68,6 +69,16 @@ def highlight_matches(text, keywords):
         highlighted = re.sub(pattern, r"<mark>\1</mark>", highlighted, flags=re.IGNORECASE)
     return highlighted
 
+# 🔹 "판례 정보"에서 선고일 추출
+def extract_date_from_info(info):
+    match = re.search(r"대법원\s+(\d{4}\.\d{2}\.\d{2})\.\s+선고", info)
+    if match:
+        try:
+            return datetime.strptime(match.group(1), "%Y.%m.%d")
+        except ValueError:
+            return datetime.min
+    return datetime.min
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -84,6 +95,7 @@ def search():
     selected_laws = request.json.get("laws") or []
     page = int(request.json.get("page", 1))
     page_size = int(request.json.get("pageSize", 20))
+    sort_by = request.json.get("sortBy", "default")  # default, latest, oldest
 
     results = []
     for law, cases in data.items():
@@ -111,6 +123,13 @@ def search():
                     for k, v in case.items()
                 }
                 results.append(highlighted_case)
+
+    # 🔹 정렬 처리
+    if sort_by == "latest":
+        results.sort(key=lambda x: extract_date_from_info(x.get("판례 정보", "")), reverse=True)
+    elif sort_by == "oldest":
+        results.sort(key=lambda x: extract_date_from_info(x.get("판례 정보", "")), reverse=False)
+    # default → 정렬 안 함
 
     total = len(results)
     start = (page - 1) * page_size
