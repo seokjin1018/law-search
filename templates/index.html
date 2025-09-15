@@ -17,10 +17,17 @@ td.caseinfo, td.title, td.issue, td.reason {
     word-break: keep-all;
     line-height: 1.5;
 }
-/* 하이라이트 표시 */
 mark {
     background-color: yellow;
     font-weight: bold;
+}
+.page-btn {
+    margin: 2px;
+    padding: 5px 10px;
+}
+.page-btn.active {
+    background-color: #007bff;
+    color: white;
 }
 </style>
 </head>
@@ -48,6 +55,10 @@ mark {
 <button id="searchBtn">검색</button>
 
 <h2>검색 결과</h2>
+<div id="loading" style="display:none; color:blue; font-weight:bold;">로딩 중...</div>
+<div id="resultCount" style="margin:5px 0; font-weight:bold;"></div>
 <div id="result"></div>
+<div id="pagination" style="margin-top:10px;"></div>
+
 </body>
 </html>

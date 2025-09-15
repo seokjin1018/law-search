@@ -3,7 +3,6 @@ import json, re, os, sys
 
 app = Flask(__name__)
 
-# 운영 환경에서 데이터 없으면 서버 중단 여부
 STRICT_DATA_CHECK = os.environ.get("STRICT_DATA_CHECK", "False").lower() == "true"
 
 # 데이터 로드
@@ -45,17 +44,16 @@ def get_all_strings(obj):
 def strict_match(keyword, text):
     clean_text = re.sub(r"[\u200B-\u200D\uFEFF]", "", text)
     clean_keyword = re.sub(r"[\u200B-\u200D\uFEFF]", "", keyword)
-
     if len(clean_keyword) > 1:
         pattern = r"".join(re.escape(ch) + r"\s*" for ch in clean_keyword[:-1]) + re.escape(clean_keyword[-1])
         match_result = re.search(pattern, clean_text) is not None
         if match_result:
-            print(f"[DEBUG] keyword='{clean_keyword}', text='{clean_text}', pattern='{pattern}', match=True")
+            print(f"[DEBUG] keyword='{clean_keyword}', match=True")
         return match_result
     else:
         match_result = clean_keyword in clean_text
         if match_result:
-            print(f"[DEBUG] keyword='{clean_keyword}', text='{clean_text}', match=True")
+            print(f"[DEBUG] keyword='{clean_keyword}', match=True")
         return match_result
 
 def highlight_matches(text, keywords):
@@ -84,6 +82,8 @@ def search():
     keywords = request.json.get("keywords", [])
     exclude = request.json.get("exclude", [])
     selected_laws = request.json.get("laws") or []
+    page = int(request.json.get("page", 1))
+    page_size = int(request.json.get("pageSize", 20))
 
     results = []
     for law, cases in data.items():
@@ -111,7 +111,18 @@ def search():
                     for k, v in case.items()
                 }
                 results.append(highlighted_case)
-    return jsonify(results)
+
+    total = len(results)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated = results[start:end]
+
+    return jsonify({
+        "total": total,
+        "page": page,
+        "pageSize": page_size,
+        "results": paginated
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

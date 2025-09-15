@@ -1,4 +1,9 @@
+let currentPage = 1;
+const pageSize = 20;
+let lastSearchParams = {};
+
 document.addEventListener("DOMContentLoaded", () => {
+    // 법령 목록 불러오기
     fetch("/laws")
         .then(res => res.json())
         .then(laws => {
@@ -32,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         });
 
+    // 모드 도움말 표시
     document.getElementById("mode").addEventListener("change", () => {
         const mode = document.getElementById("mode").value;
         const help = document.getElementById("modeHelp");
@@ -46,6 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // 키 입력 처리
     document.getElementById("keywords").addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
             e.preventDefault();
@@ -56,27 +63,40 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("exclude").addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
             e.preventDefault();
-            search();
+            search(1);
         }
     });
 
-    document.getElementById("searchBtn").addEventListener("click", search);
+    // 검색 버튼 클릭
+    document.getElementById("searchBtn").addEventListener("click", () => search(1));
 });
 
-function search() {
+function search(page = 1) {
+    currentPage = page;
     const mode = document.getElementById("mode").value;
     const keywords = document.getElementById("keywords").value.split(",").map(k => k.trim()).filter(k => k);
     const exclude = document.getElementById("exclude").value.split(",").map(k => k.trim()).filter(k => k);
     const selectedLaws = Array.from(document.querySelectorAll("#lawList input[type=checkbox]:checked")).map(cb => cb.value);
 
+    lastSearchParams = { mode, keywords, exclude, laws: selectedLaws };
+
+    // 로딩 표시
+    document.getElementById("loading").style.display = "block";
+    document.getElementById("resultCount").textContent = "";
+    document.getElementById("result").innerHTML = "";
+    document.getElementById("pagination").innerHTML = "";
+
     fetch("/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, keywords, exclude, laws: selectedLaws })
+        body: JSON.stringify({ ...lastSearchParams, page: currentPage, pageSize })
     })
     .then(res => res.json())
     .then(data => {
-        renderTable(data);
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("resultCount").textContent = `총 ${data.total}건`;
+        renderTable(data.results);
+        renderPagination(data.total, data.page, data.pageSize);
     });
 }
 
@@ -114,11 +134,24 @@ function renderTable(data) {
                     return;
                 }
             }
-            // 하이라이트 HTML이 포함될 수 있으므로 innerHTML로 넣기
+            // 하이라이트 HTML이 포함될 수 있으므로 그대로 출력
             table += `<td class="${col === '판례 정보' ? 'caseinfo' : col === '제목' ? 'title' : col === '쟁점' ? 'issue' : 'reason'}">${val || ''}</td>`;
         });
         table += "</tr>";
     });
     table += "</tbody></table>";
     document.getElementById("result").innerHTML = table;
+}
+
+function renderPagination(total, page, pageSize) {
+    const totalPages = Math.ceil(total / pageSize);
+    if (totalPages <= 1) {
+        document.getElementById("pagination").innerHTML = "";
+        return;
+    }
+    let html = "";
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="page-btn ${i === page ? 'active' : ''}" onclick="search(${i})">${i}</button>`;
+    }
+    document.getElementById("pagination").innerHTML = html;
 }
