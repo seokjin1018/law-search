@@ -42,14 +42,12 @@ def get_all_strings(obj):
         strings.append(str(obj))
     return strings
 
+# 🔹 공백 무시 매칭
 def strict_match(keyword, text):
-    clean_text = re.sub(r"[\u200B-\u200D\uFEFF]", "", text)
-    clean_keyword = re.sub(r"[\u200B-\u200D\uFEFF]", "", keyword)
-    if len(clean_keyword) > 1:
-        pattern = r"".join(re.escape(ch) + r"\s*" for ch in clean_keyword[:-1]) + re.escape(clean_keyword[-1])
-        return re.search(pattern, clean_text) is not None
-    else:
-        return clean_keyword in clean_text
+    # 제로폭 문자 제거 후 모든 공백 제거
+    clean_text = re.sub(r"\s+", "", re.sub(r"[\u200B-\u200D\uFEFF]", "", text))
+    clean_keyword = re.sub(r"\s+", "", re.sub(r"[\u200B-\u200D\uFEFF]", "", keyword))
+    return clean_keyword in clean_text
 
 def highlight_matches(text, keywords):
     if not isinstance(text, str):
