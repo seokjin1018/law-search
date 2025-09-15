@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 STRICT_DATA_CHECK = os.environ.get("STRICT_DATA_CHECK", "False").lower() == "true"
 
-# 데이터 로드
+# ===== 데이터 로드 =====
 data = {}
 json_path = os.path.join(os.path.dirname(__file__), "precedents_data_cleaned_clean.json")
 try:
@@ -28,6 +28,7 @@ except json.JSONDecodeError as e:
     if STRICT_DATA_CHECK:
         sys.exit(1)
 
+# ===== 유틸 함수 =====
 def get_all_strings(obj):
     strings = []
     if isinstance(obj, dict):
@@ -42,13 +43,13 @@ def get_all_strings(obj):
         strings.append(str(obj))
     return strings
 
-# 🔹 공백 무시 매칭
+# 공백 무시 매칭
 def strict_match(keyword, text):
-    # 제로폭 문자 제거 후 모든 공백 제거
     clean_text = re.sub(r"\s+", "", re.sub(r"[\u200B-\u200D\uFEFF]", "", text))
     clean_keyword = re.sub(r"\s+", "", re.sub(r"[\u200B-\u200D\uFEFF]", "", keyword))
     return clean_keyword in clean_text
 
+# 키워드 하이라이트
 def highlight_matches(text, keywords):
     if not isinstance(text, str):
         return text
@@ -61,7 +62,7 @@ def highlight_matches(text, keywords):
         highlighted = re.sub(pattern, r"<mark>\1</mark>", highlighted, flags=re.IGNORECASE)
     return highlighted
 
-# 🔹 "판례 정보"에서 선고일 추출 (대법원/헌법재판소 모두 지원)
+# 판례 정보에서 선고일 추출
 def extract_date_from_info(info):
     info = re.sub(r"[\u200B-\u200D\uFEFF]", "", info)
     m = re.search(r"(대법원|헌법재판소)\s+(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*선고", info)
@@ -72,6 +73,7 @@ def extract_date_from_info(info):
     except ValueError:
         return datetime.min
 
+# ===== 라우트 =====
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -91,7 +93,7 @@ def search():
     sort_by = request.json.get("sortBy", "default")  # default, latest, oldest
 
     results = []
-    matched_keywords = set()  # ✅ 매칭된 키워드 기록용
+    matched_keywords = set()
 
     for law, cases in data.items():
         if selected_laws and "전체" not in selected_laws and law not in selected_laws:
@@ -99,35 +101,40 @@ def search():
         for case in cases:
             strings = get_all_strings(case)
             strings.append(law)
+
+            # 제외 키워드 필터
             if exclude and any(strict_match(ex, s) for s in strings for ex in exclude):
                 continue
-            matched = False
-            if mode == "SINGLE":
-                matched = keywords and any(strict_match(keywords[0], s) for s in strings)
-                if matched:
-                    matched_keywords.add(keywords[0])
-            elif mode == "OR":
-                for kw in keywords:
-                    if any(strict_match(kw, s) for s in strings):
-                        matched = True
-                        matched_keywords.add(kw)
-            elif mode == "AND":
-                if all(any(strict_match(kw, s) for s in strings) for kw in keywords):
-                    matched = True
-                    matched_keywords.update(keywords)
-            elif mode == "AND_OR":
-                if len(keywords) >= 2:
-                    if any(strict_match(keywords[0], s) for s in strings) and \
-                       any(strict_match(kw, s) for s in strings for kw in keywords[1:]):
+
+            # ✅ 키워드 없으면 전체 통과
+            if not keywords:
+                matched = True
+            else:
+                matched = False
+                if mode == "SINGLE":
+                    matched = any(strict_match(keywords[0], s) for s in strings)
+                    if matched:
+                        matched_keywords.add(keywords[0])
+                elif mode == "OR":
+                    for kw in keywords:
+                        if any(strict_match(kw, s) for s in strings):
+                            matched = True
+                            matched_keywords.add(kw)
+                elif mode == "AND":
+                    if all(any(strict_match(kw, s) for s in strings) for kw in keywords):
                         matched = True
                         matched_keywords.update(keywords)
+                elif mode == "AND_OR":
+                    if len(keywords) >= 2:
+                        if any(strict_match(keywords[0], s) for s in strings) and \
+                           any(strict_match(kw, s) for s in strings for kw in keywords[1:]):
+                            matched = True
+                            matched_keywords.update(keywords)
 
             if matched:
-                # 정렬용 날짜는 원본에서 추출
                 raw_info = case.get("판례 정보", "")
                 sort_date = extract_date_from_info(raw_info)
 
-                # 하이라이트 적용
                 highlighted_case = {
                     k: highlight_matches(v, keywords) if isinstance(v, str) else v
                     for k, v in case.items()
@@ -135,17 +142,16 @@ def search():
                 highlighted_case["_sort_date"] = sort_date
                 results.append(highlighted_case)
 
-    # ✅ 검색 끝난 뒤 한 번만 로그 출력
+    # 디버그 로그
     for kw in matched_keywords:
         print(f"[DEBUG] keyword='{kw}', match=True")
 
-    # 🔹 정렬 처리
+    # 정렬
     if sort_by == "latest":
         results.sort(key=lambda x: x.get("_sort_date", datetime.min), reverse=True)
     elif sort_by == "oldest":
         results.sort(key=lambda x: x.get("_sort_date", datetime.min))
 
-    # 응답 전 정렬키 제거
     for r in results:
         r.pop("_sort_date", None)
 
