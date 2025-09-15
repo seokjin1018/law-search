@@ -65,12 +65,12 @@ def highlight_matches(text, keywords):
 
 # 🔹 "판례 정보"에서 선고일 추출 (대법원/헌법재판소 모두 지원)
 def extract_date_from_info(info):
-    m = re.search(r"(대법원|헌법재판소)\s+(\d{4}\.\d{1,2}\.\d{1,2})\.?\s*선고", info)
+    info = re.sub(r"[\u200B-\u200D\uFEFF]", "", info)
+    m = re.search(r"(대법원|헌법재판소)\s+(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*선고", info)
     if not m:
         return datetime.min
     try:
-        y, mo, d = m.group(2).split(".")
-        return datetime(int(y), int(mo), int(d))
+        return datetime(int(m.group(2)), int(m.group(3)), int(m.group(4)))
     except ValueError:
         return datetime.min
 
@@ -113,7 +113,11 @@ def search():
                     matched = any(strict_match(keywords[0], s) for s in strings) and \
                               any(strict_match(kw, s) for s in strings for kw in keywords[1:])
             if matched:
-                sort_date = extract_date_from_info(case.get("판례 정보", ""))
+                # 정렬용 날짜는 원본에서 추출
+                raw_info = case.get("판례 정보", "")
+                sort_date = extract_date_from_info(raw_info)
+
+                # 하이라이트 적용
                 highlighted_case = {
                     k: highlight_matches(v, keywords) if isinstance(v, str) else v
                     for k, v in case.items()
@@ -126,6 +130,10 @@ def search():
         results.sort(key=lambda x: x.get("_sort_date", datetime.min), reverse=True)
     elif sort_by == "oldest":
         results.sort(key=lambda x: x.get("_sort_date", datetime.min))
+
+    # 응답 전 정렬키 제거
+    for r in results:
+        r.pop("_sort_date", None)
 
     total = len(results)
     start = (page - 1) * page_size

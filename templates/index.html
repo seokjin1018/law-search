@@ -21,9 +21,17 @@ mark {
     background-color: yellow;
     font-weight: bold;
 }
+
+/* 페이지네이션 스타일 */
+#pagination {
+    margin-top: 10px;
+    text-align: center; /* 버튼 가운데 정렬 */
+}
 .page-btn {
-    margin: 2px;
-    padding: 5px 10px;
+    margin: 4px;
+    padding: 7.5px 15px; /* 기존 대비 1.5배 */
+    font-size: 1.5em;    /* 글자 크기 확대 */
+    cursor: pointer;
 }
 .page-btn.active {
     background-color: #007bff;
@@ -68,8 +76,7 @@ mark {
 <div id="loading" style="display:none; color:blue; font-weight:bold;">로딩 중...</div>
 <div id="resultCount" style="margin:5px 0; font-weight:bold;"></div>
 <div id="result"></div>
-<div id="pagination" style="margin-top:10px;"></div>
+<div id="pagination"></div>
 
 </body>
 </html>
-``
