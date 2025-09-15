@@ -47,15 +47,9 @@ def strict_match(keyword, text):
     clean_keyword = re.sub(r"[\u200B-\u200D\uFEFF]", "", keyword)
     if len(clean_keyword) > 1:
         pattern = r"".join(re.escape(ch) + r"\s*" for ch in clean_keyword[:-1]) + re.escape(clean_keyword[-1])
-        match_result = re.search(pattern, clean_text) is not None
-        if match_result:
-            print(f"[DEBUG] keyword='{clean_keyword}', match=True")
-        return match_result
+        return re.search(pattern, clean_text) is not None
     else:
-        match_result = clean_keyword in clean_text
-        if match_result:
-            print(f"[DEBUG] keyword='{clean_keyword}', match=True")
-        return match_result
+        return clean_keyword in clean_text
 
 def highlight_matches(text, keywords):
     if not isinstance(text, str):
@@ -69,15 +63,16 @@ def highlight_matches(text, keywords):
         highlighted = re.sub(pattern, r"<mark>\1</mark>", highlighted, flags=re.IGNORECASE)
     return highlighted
 
-# 🔹 "판례 정보"에서 선고일 추출
+# 🔹 "판례 정보"에서 선고일 추출 (대법원/헌법재판소 모두 지원)
 def extract_date_from_info(info):
-    match = re.search(r"대법원\s+(\d{4}\.\d{2}\.\d{2})\.\s+선고", info)
-    if match:
-        try:
-            return datetime.strptime(match.group(1), "%Y.%m.%d")
-        except ValueError:
-            return datetime.min
-    return datetime.min
+    m = re.search(r"(대법원|헌법재판소)\s+(\d{4}\.\d{1,2}\.\d{1,2})\.?\s*선고", info)
+    if not m:
+        return datetime.min
+    try:
+        y, mo, d = m.group(2).split(".")
+        return datetime(int(y), int(mo), int(d))
+    except ValueError:
+        return datetime.min
 
 @app.route("/")
 def index():
@@ -118,18 +113,19 @@ def search():
                     matched = any(strict_match(keywords[0], s) for s in strings) and \
                               any(strict_match(kw, s) for s in strings for kw in keywords[1:])
             if matched:
+                sort_date = extract_date_from_info(case.get("판례 정보", ""))
                 highlighted_case = {
                     k: highlight_matches(v, keywords) if isinstance(v, str) else v
                     for k, v in case.items()
                 }
+                highlighted_case["_sort_date"] = sort_date
                 results.append(highlighted_case)
 
     # 🔹 정렬 처리
     if sort_by == "latest":
-        results.sort(key=lambda x: extract_date_from_info(x.get("판례 정보", "")), reverse=True)
+        results.sort(key=lambda x: x.get("_sort_date", datetime.min), reverse=True)
     elif sort_by == "oldest":
-        results.sort(key=lambda x: extract_date_from_info(x.get("판례 정보", "")), reverse=False)
-    # default → 정렬 안 함
+        results.sort(key=lambda x: x.get("_sort_date", datetime.min))
 
     total = len(results)
     start = (page - 1) * page_size

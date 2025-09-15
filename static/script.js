@@ -69,6 +69,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 검색 버튼 클릭
     document.getElementById("searchBtn").addEventListener("click", () => search(1));
+
+    // 🔹 정렬 드롭다운 변경 시 자동 재검색
+    const sortSelect = document.getElementById("sortBy");
+    if (sortSelect) {
+        sortSelect.addEventListener("change", () => search(1));
+    }
 });
 
 function search(page = 1) {
