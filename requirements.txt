@@ -1,1 +1,1 @@
-FlaskgunicornFlask-CorsWerkzeugpsycopg2-binarySQLAlchemy
+FlaskgunicornFlask-CorsWerkzeugpsycopg2-binarySQLAlchemy# Trigger deploy  <- 이 줄을 추가하고 저장!
