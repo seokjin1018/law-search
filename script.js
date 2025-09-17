@@ -371,6 +371,7 @@ function highlightText(text) {
       .map(
         (k) =>
           k
+            .replace(/\s+/g, "") // ✅ 검색어 내부 공백 제거 (추가)
             .replace(/[.*+?^${}()|[\]\\]/g, "\\$&") // 특수문자 이스케이프
             .split("") // 한 글자씩 분리
             .join("\\s*") // 글자 사이에 \s* 허용

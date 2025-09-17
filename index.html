@@ -412,18 +412,20 @@ function displayResults(results, type, context) {
 }
 
 function highlightText(text) {
-    if (!currentSearchKeywords.length || !text) return String(text);
-    const textStr = String(text);
-const regex = new RegExp(
+  if (!currentSearchKeywords.length || !text) return String(text);
+  const textStr = String(text);
+  const regex = new RegExp(
     currentSearchKeywords
-        .map(k => k
-            .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // 특수문자 이스케이프
-            .split('')                             // 한 글자씩 분리
-            .join('\\s*')                          // 글자 사이에 \s* 허용
-        )
-        .join('|'),
-    'gi'
-);
+      .map((k) =>
+        k
+          .replace(/\s+/g, '') // ✅ 검색어 내부 공백 제거 (추가)
+          .replace(/[.*+?^${}()|[\]\\]/g, "\\$&") // 특수문자 이스케이프
+          .split("") // 한 글자씩 분리
+          .join("\\s*") // 글자 사이에 \s* 허용
+      )
+      .join("|"),
+    "gi"
+  );
 
     return textStr.replace(regex, (match) => `<mark class="highlight">${match}</mark>`);
 }
