@@ -221,20 +221,8 @@ def search_criminal_cases():
     if selected_article:
         # 이미 selected_law로 필터링된 결과에 대해 추가 필터링
         filtered_rows = [row for row in filtered_rows if selected_article in row.get("참조조문", "")]
-    
     # 공통 검색 함수 호출
     return jsonify(process_search(filtered_rows, data, "선고일자"))
-
-    # <<<<<<<<<<< [수정] 정확한 날짜 정렬
-    if sort_by == "latest":
-        results.sort(key=lambda x: normalize_date_for_sort(x.get("선고일자", "")), reverse=True)
-    elif sort_by == "oldest":
-        results.sort(key=lambda x: normalize_date_for_sort(x.get("선고일자", "")))
-
-    total = len(results)
-    start = (page - 1) * page_size
-    end = start + page_size
-    return jsonify({"total": total, "results": results[start:end]})
 
 # --- 회원/인증 ---
 @app.route("/signup", methods=["POST"])
