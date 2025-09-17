@@ -6,10 +6,29 @@ import csv
 import re
 from datetime import datetime # <<<<<<<<<<< [추가] 날짜 정렬 기능을 위해 import
 from werkzeug.security import generate_password_hash, check_password_hash
+import sqlite3 # <<<<<<<<<<< [추가]
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 app.secret_key = "your_secret_key"
 CORS(app)
+
+# ===== [추가] 데이터베이스 초기화 =====
+DB_FILE = "users.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    # users 테이블 생성: nickname, password, bookmarks(JSON 텍스트)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nickname TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        bookmarks TEXT NOT NULL
+    )
+    """)
+    conn.commit()
+    conn.close()
 
 # ===== 데이터 로드 =====
 with open("precedents_data_cleaned_clean.json", "r", encoding="utf-8-sig") as f:
@@ -65,20 +84,6 @@ def load_criminal_csv(path="정리본.csv"):
     criminal_laws_dict = {k: sorted(list(v)) for k, v in mapping.items()}
 
 load_criminal_csv()
-
-# ===== 유저 데이터 저장 =====
-USERS_FILE = "users.json"
-if not os.path.exists(USERS_FILE):
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=2)
-
-def load_users():
-    with open(USERS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_users(users):
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
 
 # ===== 유틸리티 함수 =====
 # <<<<<<<<<<< [추가] 정확한 날짜 정렬을 위한 헬퍼 함수
@@ -224,7 +229,7 @@ def search_criminal_cases():
     # 공통 검색 함수 호출
     return jsonify(process_search(filtered_rows, data, "선고일자"))
 
-# --- 회원/인증 ---
+# --- [수정] 회원/인증 (SQLite 연동) ---
 @app.route("/signup", methods=["POST"])
 def signup():
     data = request.json
@@ -233,15 +238,18 @@ def signup():
     if not nickname or not password:
         return jsonify({"error": "닉네임과 비밀번호를 모두 입력하세요."}), 400
 
-    users = load_users()
-    if nickname in users:
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE nickname = ?", (nickname,))
+    if cursor.fetchone():
+        conn.close()
         return jsonify({"error": "이미 존재하는 닉네임입니다."}), 400
 
-    # 비밀번호를 해시하여 저장
     hashed_password = generate_password_hash(password)
-    users[nickname] = {"password": hashed_password, "bookmarks": []}
-    save_users(users)
-
+    cursor.execute("INSERT INTO users (nickname, password, bookmarks) VALUES (?, ?, ?)",
+                   (nickname, hashed_password, json.dumps([])))
+    conn.commit()
+    conn.close()
     return jsonify({"message": "회원가입이 완료되었습니다."})
 
 @app.route("/login", methods=["POST"])
@@ -249,10 +257,14 @@ def login():
     data = request.json
     nickname = data.get("nickname", "").strip()
     password = data.get("password", "").strip()
-    users = load_users()
 
-    # 저장된 해시값과 입력된 비밀번호를 비교
-    if nickname not in users or not check_password_hash(users[nickname]["password"], password):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT password FROM users WHERE nickname = ?", (nickname,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user or not check_password_hash(user[0], password):
         return jsonify({"error": "닉네임 또는 비밀번호가 올바르지 않습니다."}), 400
 
     session["nickname"] = nickname
@@ -267,52 +279,65 @@ def logout():
 def whoami():
     if "nickname" not in session:
         return jsonify({})
-    users = load_users()
+
     nickname = session["nickname"]
-    bookmarks = users.get(nickname, {}).get("bookmarks", [])
-    # <<<<<<<<<<< [수정] 북마크 type 정보도 함께 반환
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT bookmarks FROM users WHERE nickname = ?", (nickname,))
+    user = cursor.fetchone()
+    conn.close()
+
+    bookmarks = json.loads(user[0]) if user else []
     return jsonify({"nickname": nickname, "bookmarks": bookmarks})
 
-# --- 북마크 ---
+# --- [수정] 북마크 (SQLite 연동) ---
 @app.route("/bookmarks/add", methods=["POST"])
 def add_bookmark():
     if "nickname" not in session:
         return jsonify({"error": "로그인이 필요합니다."}), 401
-    data = request.json
-    users = load_users()
+
     nickname = session["nickname"]
-    if nickname not in users:
-        users[nickname] = {"bookmarks": []} 
-    
-    bookmarks = users[nickname].get("bookmarks", [])
-    new_bookmark = {"제목": data["제목"], "type": data["type"]}
-    
+    new_bookmark = {"제목": request.json["제목"], "type": request.json["type"]}
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT bookmarks FROM users WHERE nickname = ?", (nickname,))
+    user = cursor.fetchone()
+    bookmarks = json.loads(user[0]) if user else []
+
     if new_bookmark not in bookmarks:
         bookmarks.append(new_bookmark)
-        users[nickname]["bookmarks"] = bookmarks
-        save_users(users)
-        
+        cursor.execute("UPDATE users SET bookmarks = ? WHERE nickname = ?", (json.dumps(bookmarks), nickname))
+        conn.commit()
+
+    conn.close()
     return jsonify({"status": "added", "bookmarks": bookmarks})
 
 @app.route("/bookmarks/remove", methods=["POST"])
 def remove_bookmark():
     if "nickname" not in session:
         return jsonify({"error": "로그인이 필요합니다."}), 401
-    data = request.json
-    users = load_users()
+
     nickname = session["nickname"]
-    if nickname not in users:
+    bookmark_to_remove = {"제목": request.json["제목"], "type": request.json["type"]}
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT bookmarks FROM users WHERE nickname = ?", (nickname,))
+    user = cursor.fetchone()
+
+    if not user:
+        conn.close()
         return jsonify({"error": "사용자 정보를 찾을 수 없습니다."}), 404
 
-    bookmark_to_remove = {"제목": data["제목"], "type": data["type"]}
-    bookmarks = users[nickname].get("bookmarks", [])
-    
+    bookmarks = json.loads(user[0])
     new_bookmarks = [bm for bm in bookmarks if bm != bookmark_to_remove]
-    
-    if len(new_bookmarks) < len(bookmarks):
-        users[nickname]["bookmarks"] = new_bookmarks
-        save_users(users)
 
+    if len(new_bookmarks) < len(bookmarks):
+        cursor.execute("UPDATE users SET bookmarks = ? WHERE nickname = ?", (json.dumps(new_bookmarks), nickname))
+        conn.commit()
+
+    conn.close()
     return jsonify({"status": "removed", "bookmarks": new_bookmarks})
 
 @app.route("/bookmarks")
@@ -369,4 +394,5 @@ def get_bookmarks():
     return jsonify(response)
 
 if __name__ == "__main__":
+    init_db()  # <<<<<<<<<<< [추가] 앱 실행 시 데이터베이스 파일 생성
     app.run(debug=True)
