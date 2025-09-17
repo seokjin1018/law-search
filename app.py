@@ -5,6 +5,7 @@ import json
 import csv
 import re
 from datetime import datetime # <<<<<<<<<<< [추가] 날짜 정렬 기능을 위해 import
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 app.secret_key = "your_secret_key"
@@ -135,6 +136,43 @@ def exclude_keywords(text, exclude_list):
     return any(e in text_no_space for e in processed_exclude)
 
 # ===== 라우트(API) =====
+def process_search(items, data, date_key):
+    """
+    검색, 필터링, 정렬, 페이지네이션을 처리하는 공통 함수
+    - items: 검색 대상 데이터 리스트 (CASES 또는 criminal_rows)
+    - data: request.json()으로 받은 데이터
+    - date_key: 날짜 정렬에 사용할 딕셔너리 키 ("판례 정보" 또는 "선고일자")
+    """
+    keywords = data.get("keywords", [])
+    exclude = data.get("exclude", [])
+    mode = data.get("mode", "SINGLE")
+    sort_by = data.get("sortBy", "default")
+    page = data.get("page", 1)
+    page_size = data.get("pageSize", 20)
+
+    # 키워드 및 제외어 필터링
+    results = []
+    for item in items:
+        text_blob = " ".join(str(v) for v in item.values())
+        if not match_keywords(text_blob, keywords, mode):
+            continue
+        if exclude_keywords(text_blob, exclude):
+            continue
+        results.append(item)
+
+    # 날짜 기준 정렬
+    if sort_by == "latest":
+        results.sort(key=lambda x: normalize_date_for_sort(x.get(date_key, "")), reverse=True)
+    elif sort_by == "oldest":
+        results.sort(key=lambda x: normalize_date_for_sort(x.get(date_key, "")))
+    
+    # 페이지네이션
+    total = len(results)
+    start = (page - 1) * page_size
+    end = start + page_size
+    return {"total": total, "results": results[start:end]}
+
+
 @app.route("/")
 def index():
     return send_from_directory(".", "index.html")
@@ -145,37 +183,17 @@ def get_laws():
 
 @app.route("/search", methods=["POST"])
 def search_cases():
+    """일반 판례 검색 API"""
     data = request.json
-    mode = data.get("mode", "SINGLE")
-    keywords = data.get("keywords", [])
-    exclude = data.get("exclude", [])
-    sort_by = data.get("sortBy", "default")
-    laws = data.get("laws", []) # <<<<<<<<<<< [수정] 체크박스에서 여러 법령을 리스트로 받음
-    page = data.get("page", 1)
-    page_size = data.get("pageSize", 20)
-
-    results = []
-    for case in CASES:
-        # <<<<<<<<<<< [수정] 체크박스에서 받은 여러 법령으로 필터링
-        if laws and "전체" not in laws and case.get("법령명") not in laws:
-            continue
-        text_blob = " ".join(str(v) for v in case.values())
-        if not match_keywords(text_blob, keywords, mode):
-            continue
-        if exclude_keywords(text_blob, exclude):
-            continue
-        results.append(case)
-
-    # <<<<<<<<<<< [수정] 정확한 날짜 정렬
-    if sort_by == "latest":
-        results.sort(key=lambda x: normalize_date_for_sort(x.get("판례 정보", "")), reverse=True)
-    elif sort_by == "oldest":
-        results.sort(key=lambda x: normalize_date_for_sort(x.get("판례 정보", "")))
-
-    total = len(results)
-    start = (page - 1) * page_size
-    end = start + page_size
-    return jsonify({"total": total, "results": results[start:end]})
+    laws = data.get("laws", [])
+    
+    # 일반 판례에만 해당하는 '법령명' 필터링 로직
+    filtered_cases = CASES
+    if laws and "전체" not in laws:
+        filtered_cases = [case for case in CASES if case.get("법령명") in laws]
+        
+    # 공통 검색 함수 호출
+    return jsonify(process_search(filtered_cases, data, "판례 정보"))
 
 @app.route("/criminal/laws", methods=["GET"])
 def get_criminal_laws():
@@ -190,30 +208,22 @@ def get_criminal_articles():
 
 @app.route("/criminal/search", methods=["POST"])
 def search_criminal_cases():
+    """형사 판례 검색 API"""
     data = request.json
-    mode = data.get("mode", "SINGLE")
-    keywords = data.get("keywords", [])
-    exclude = data.get("exclude", [])
-    sort_by = data.get("sortBy", "default")
     selected_law = data.get("selectedLaw", "").strip()
     selected_article = data.get("selectedArticle", "").strip()
-    page = data.get("page", 1)
-    page_size = data.get("pageSize", 20)
 
-    results = []
-    for row in criminal_rows:
-        ref_text = row.get("참조조문", "")
-        if selected_law and selected_law not in ref_text:
-            continue
-        if selected_article and not (selected_law in ref_text and selected_article in ref_text):
-            continue
-
-        text_blob = " ".join(str(v) for v in row.values())
-        if not match_keywords(text_blob, keywords, mode):
-            continue
-        if exclude_keywords(text_blob, exclude):
-            continue
-        results.append(row)
+    # 형사 판례에만 해당하는 '참조조문' 필터링 로직
+    filtered_rows = criminal_rows
+    if selected_law:
+        # comprehension을 사용하여 더 간결하게 필터링
+        filtered_rows = [row for row in filtered_rows if selected_law in row.get("참조조문", "")]
+    if selected_article:
+        # 이미 selected_law로 필터링된 결과에 대해 추가 필터링
+        filtered_rows = [row for row in filtered_rows if selected_article in row.get("참조조문", "")]
+    
+    # 공통 검색 함수 호출
+    return jsonify(process_search(filtered_rows, data, "선고일자"))
 
     # <<<<<<<<<<< [수정] 정확한 날짜 정렬
     if sort_by == "latest":
@@ -234,11 +244,16 @@ def signup():
     password = data.get("password", "").strip()
     if not nickname or not password:
         return jsonify({"error": "닉네임과 비밀번호를 모두 입력하세요."}), 400
+
     users = load_users()
     if nickname in users:
         return jsonify({"error": "이미 존재하는 닉네임입니다."}), 400
-    users[nickname] = {"password": password, "bookmarks": []}
+
+    # 비밀번호를 해시하여 저장
+    hashed_password = generate_password_hash(password)
+    users[nickname] = {"password": hashed_password, "bookmarks": []}
     save_users(users)
+
     return jsonify({"message": "회원가입이 완료되었습니다."})
 
 @app.route("/login", methods=["POST"])
@@ -247,8 +262,11 @@ def login():
     nickname = data.get("nickname", "").strip()
     password = data.get("password", "").strip()
     users = load_users()
-    if nickname not in users or users[nickname]["password"] != password:
+
+    # 저장된 해시값과 입력된 비밀번호를 비교
+    if nickname not in users or not check_password_hash(users[nickname]["password"], password):
         return jsonify({"error": "닉네임 또는 비밀번호가 올바르지 않습니다."}), 400
+
     session["nickname"] = nickname
     return jsonify({"message": "로그인 성공"})
 
