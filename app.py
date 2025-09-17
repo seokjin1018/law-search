@@ -6,29 +6,32 @@ import csv
 import re
 from datetime import datetime # <<<<<<<<<<< [추가] 날짜 정렬 기능을 위해 import
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3 # <<<<<<<<<<< [추가]
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__, static_folder="static", static_url_path="")
-app.secret_key = "your_secret_key"
+app.secret_key = "your_secret_key" # 로컬 테스트용, Render에서는 환경 변수를 사용하게 됩니다.
 CORS(app)
 
-# ===== [추가] 데이터베이스 초기화 =====
-DB_FILE = "users.db"
+# ===== [수정] PostgreSQL 연동 설정 =====
+# Render에서 제공하는 DATABASE_URL의 스키마를 SQLAlchemy에 맞게 수정
+db_url = os.environ.get('DATABASE_URL')
+if db_url and db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+    
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    # users 테이블 생성: nickname, password, bookmarks(JSON 텍스트)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nickname TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        bookmarks TEXT NOT NULL
-    )
-    """)
-    conn.commit()
-    conn.close()
+# ===== [수정] User 모델(테이블) 클래스 정의 =====
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nickname = db.Column(db.String(80), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    bookmarks = db.Column(db.Text, nullable=False, default='[]')
+
+# 앱 컨텍스트 안에서 테이블 생성 (코드가 실행될 때 테이블이 없으면 자동 생성)
+with app.app_context():
+    db.create_all()
 
 # ===== 데이터 로드 =====
 with open("precedents_data_cleaned_clean.json", "r", encoding="utf-8-sig") as f:
@@ -230,6 +233,7 @@ def search_criminal_cases():
     return jsonify(process_search(filtered_rows, data, "선고일자"))
 
 # --- [수정] 회원/인증 (SQLite 연동) ---
+# --- [수정] 회원/인증 (SQLAlchemy 연동) ---
 @app.route("/signup", methods=["POST"])
 def signup():
     data = request.json
@@ -238,18 +242,13 @@ def signup():
     if not nickname or not password:
         return jsonify({"error": "닉네임과 비밀번호를 모두 입력하세요."}), 400
 
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE nickname = ?", (nickname,))
-    if cursor.fetchone():
-        conn.close()
+    if User.query.filter_by(nickname=nickname).first():
         return jsonify({"error": "이미 존재하는 닉네임입니다."}), 400
 
     hashed_password = generate_password_hash(password)
-    cursor.execute("INSERT INTO users (nickname, password, bookmarks) VALUES (?, ?, ?)",
-                   (nickname, hashed_password, json.dumps([])))
-    conn.commit()
-    conn.close()
+    new_user = User(nickname=nickname, password=hashed_password, bookmarks=json.dumps([]))
+    db.session.add(new_user)
+    db.session.commit()
     return jsonify({"message": "회원가입이 완료되었습니다."})
 
 @app.route("/login", methods=["POST"])
@@ -258,13 +257,9 @@ def login():
     nickname = data.get("nickname", "").strip()
     password = data.get("password", "").strip()
 
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT password FROM users WHERE nickname = ?", (nickname,))
-    user = cursor.fetchone()
-    conn.close()
+    user = User.query.filter_by(nickname=nickname).first()
 
-    if not user or not check_password_hash(user[0], password):
+    if not user or not check_password_hash(user.password, password):
         return jsonify({"error": "닉네임 또는 비밀번호가 올바르지 않습니다."}), 400
 
     session["nickname"] = nickname
@@ -280,84 +275,56 @@ def whoami():
     if "nickname" not in session:
         return jsonify({})
 
-    nickname = session["nickname"]
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT bookmarks FROM users WHERE nickname = ?", (nickname,))
-    user = cursor.fetchone()
-    conn.close()
+    user = User.query.filter_by(nickname=session["nickname"]).first()
+    if not user:
+        session.pop("nickname", None)
+        return jsonify({})
 
-    bookmarks = json.loads(user[0]) if user else []
-    return jsonify({"nickname": nickname, "bookmarks": bookmarks})
-
-# --- [수정] 북마크 (SQLite 연동) ---
+    bookmarks = json.loads(user.bookmarks)
+    return jsonify({"nickname": user.nickname, "bookmarks": bookmarks})
+    
+# --- [수정] 북마크 (SQLAlchemy 연동) ---
 @app.route("/bookmarks/add", methods=["POST"])
 def add_bookmark():
-    if "nickname" not in session:
-        return jsonify({"error": "로그인이 필요합니다."}), 401
-
-    nickname = session["nickname"]
+    if "nickname" not in session: return jsonify({"error": "로그인이 필요합니다."}), 401
+    
+    user = User.query.filter_by(nickname=session["nickname"]).first()
+    if not user: return jsonify({"error": "사용자를 찾을 수 없습니다."}), 404
+    
     new_bookmark = {"제목": request.json["제목"], "type": request.json["type"]}
-
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT bookmarks FROM users WHERE nickname = ?", (nickname,))
-    user = cursor.fetchone()
-    bookmarks = json.loads(user[0]) if user else []
+    bookmarks = json.loads(user.bookmarks)
 
     if new_bookmark not in bookmarks:
         bookmarks.append(new_bookmark)
-        cursor.execute("UPDATE users SET bookmarks = ? WHERE nickname = ?", (json.dumps(bookmarks), nickname))
-        conn.commit()
-
-    conn.close()
+        user.bookmarks = json.dumps(bookmarks)
+        db.session.commit()
+        
     return jsonify({"status": "added", "bookmarks": bookmarks})
 
 @app.route("/bookmarks/remove", methods=["POST"])
 def remove_bookmark():
-    if "nickname" not in session:
-        return jsonify({"error": "로그인이 필요합니다."}), 401
+    if "nickname" not in session: return jsonify({"error": "로그인이 필요합니다."}), 401
+    
+    user = User.query.filter_by(nickname=session["nickname"]).first()
+    if not user: return jsonify({"error": "사용자를 찾을 수 없습니다."}), 404
 
-    nickname = session["nickname"]
     bookmark_to_remove = {"제목": request.json["제목"], "type": request.json["type"]}
-
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT bookmarks FROM users WHERE nickname = ?", (nickname,))
-    user = cursor.fetchone()
-
-    if not user:
-        conn.close()
-        return jsonify({"error": "사용자 정보를 찾을 수 없습니다."}), 404
-
-    bookmarks = json.loads(user[0])
+    bookmarks = json.loads(user.bookmarks)
     new_bookmarks = [bm for bm in bookmarks if bm != bookmark_to_remove]
 
     if len(new_bookmarks) < len(bookmarks):
-        cursor.execute("UPDATE users SET bookmarks = ? WHERE nickname = ?", (json.dumps(new_bookmarks), nickname))
-        conn.commit()
+        user.bookmarks = json.dumps(new_bookmarks)
+        db.session.commit()
 
-    conn.close()
     return jsonify({"status": "removed", "bookmarks": new_bookmarks})
 
 @app.route("/bookmarks")
 def get_bookmarks():
-    if "nickname" not in session:
-        return jsonify({"error": "로그인이 필요합니다."}), 401
-
-    nickname = session["nickname"]
+    if "nickname" not in session: return jsonify({"error": "로그인이 필요합니다."}), 401
     
-    # [수정] DB에서 북마크 데이터를 가져옵니다.
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT bookmarks FROM users WHERE nickname = ?", (nickname,))
-    user = cursor.fetchone()
-    conn.close()
-
-    # DB에서 가져온 JSON 문자열을 파이썬 리스트로 변환합니다.
-    bookmarks = json.loads(user[0]) if user else []
-
-    # --- 이하 로직은 기존과 동일합니다 ---
+    user = User.query.filter_by(nickname=session["nickname"]).first()
+    bookmarks = json.loads(user.bookmarks) if user else []
+    
     btype = request.args.get("type", "all")
     legacy_page = int(request.args.get("legacy_page", 1))
     criminal_page = int(request.args.get("criminal_page", 1))
@@ -369,39 +336,22 @@ def get_bookmarks():
     for bm in bookmarks:
         if bm["type"] == "legacy":
             match = next((c for c in CASES if c.get("제목") == bm["제목"]), None)
-            if match:
-                legacy_bookmarks.append({**match, "type": "legacy"})
+            if match: legacy_bookmarks.append({**match, "type": "legacy"})
         elif bm["type"] == "criminal":
             match = next((c for c in criminal_rows if c.get("제목") == bm["제목"]), None)
-            if match:
-                criminal_bookmarks.append({**match, "type": "criminal"})
+            if match: criminal_bookmarks.append({**match, "type": "criminal"})
     
     response = {}
-    
     if btype == "all" or btype == "legacy":
-        legacy_total = len(legacy_bookmarks)
-        legacy_start = (legacy_page - 1) * page_size
-        legacy_end = legacy_start + page_size
-        response["legacy"] = {
-            "results": legacy_bookmarks[legacy_start:legacy_end],
-            "total": legacy_total,
-            "page": legacy_page,
-            "pageSize": page_size
-        }
-
+        total = len(legacy_bookmarks)
+        start = (legacy_page - 1) * page_size
+        response["legacy"] = {"results": legacy_bookmarks[start:start+page_size], "total": total, "page": legacy_page, "pageSize": page_size}
     if btype == "all" or btype == "criminal":
-        criminal_total = len(criminal_bookmarks)
-        criminal_start = (criminal_page - 1) * page_size
-        criminal_end = criminal_start + page_size
-        response["criminal"] = {
-            "results": criminal_bookmarks[criminal_start:criminal_end],
-            "total": criminal_total,
-            "page": criminal_page,
-            "pageSize": page_size
-        }
+        total = len(criminal_bookmarks)
+        start = (criminal_page - 1) * page_size
+        response["criminal"] = {"results": criminal_bookmarks[start:start+page_size], "total": total, "page": criminal_page, "pageSize": page_size}
         
     return jsonify(response)
 
 if __name__ == "__main__":
-    init_db()  # <<<<<<<<<<< [추가] 앱 실행 시 데이터베이스 파일 생성
     app.run(debug=True)
