@@ -345,14 +345,23 @@ def get_bookmarks():
     if "nickname" not in session:
         return jsonify({"error": "로그인이 필요합니다."}), 401
 
+    nickname = session["nickname"]
+    
+    # [수정] DB에서 북마크 데이터를 가져옵니다.
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT bookmarks FROM users WHERE nickname = ?", (nickname,))
+    user = cursor.fetchone()
+    conn.close()
+
+    # DB에서 가져온 JSON 문자열을 파이썬 리스트로 변환합니다.
+    bookmarks = json.loads(user[0]) if user else []
+
+    # --- 이하 로직은 기존과 동일합니다 ---
     btype = request.args.get("type", "all")
     legacy_page = int(request.args.get("legacy_page", 1))
     criminal_page = int(request.args.get("criminal_page", 1))
     page_size = 10
-
-    users = load_users()
-    nickname = session["nickname"]
-    bookmarks = users.get(nickname, {}).get("bookmarks", [])
 
     legacy_bookmarks = []
     criminal_bookmarks = []
